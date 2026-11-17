@@ -133,6 +133,17 @@ h3{font-size:22px;letter-spacing:.02em}
 .item p b{font-weight:600;color:var(--dim)}
 .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 .copied{font:12px var(--f-mono);color:var(--ok)}
+@media print{
+  :root{color-scheme:light}
+  body{background:#fff;color:#111;font-size:12px}
+  .top,.hazard,#intro,#game,.export,.note{display:none!important}
+  #report{display:flex!important;padding:0}
+  .kick,.stat b,.comp .v,.item .hd .t,.item p b,.tag{color:#555!important}
+  .stat,.item{background:#fff;border-color:#bbb;break-inside:avoid}
+  .comp .track{background:#ddd}.comp .track i{background:#111}
+  .score .big,.cand,h3,.item .hd strong{color:#111}
+  .chip.ok{color:#14753f}.chip.incident{color:#a85400}.chip.grave{color:#b3141b}
+}
 @media (prefers-reduced-motion:reduce){.alarm.blink,.narr .cursor{animation:none}}
 </style>
 </head>
@@ -209,7 +220,14 @@ h3{font-size:22px;letter-spacing:.02em}
     <div class="comps" id="r-comps"></div>
     <h3>Détail des situations</h3>
     <div class="items" id="r-items"></div>
-    <div class="row"><button class="btn" id="r-copy">Copier le rapport</button><button class="btn ghost" id="r-again">Nouveau test</button><span class="copied" id="r-copied" hidden>Rapport copié</span></div>
+    <div class="row export">
+      <button class="btn" id="r-share" hidden>Partager le rapport</button>
+      <button class="btn ghost" id="r-dl" hidden>Télécharger (.txt)</button>
+      <button class="btn ghost" id="r-print" hidden>Imprimer ou PDF</button>
+      <button class="btn ghost" id="r-copy">Copier le rapport</button>
+      <button class="btn ghost" id="r-again">Nouveau test</button>
+      <span class="copied" id="r-copied" hidden>Rapport copié</span>
+    </div>
     <p class="note">Ce rapport décrit des choix faits dans une simulation. Il aide à ouvrir la discussion avec un candidat ou un stagiaire, il ne mesure pas à lui seul une aptitude à la conduite.</p>
   </section>
 </main>
@@ -771,8 +789,25 @@ function report(){
       det.push('   '+(r.step?'Sous pression : ':'Décision : ')+r.choice+' ('+lab(r.kind)+(r.secs==null?', temps écoulé':', '+fmt(r.secs))+')','   Bonne pratique : '+r.rule)});
     ib.append(d)});
   reportText=['ALLÉE 7 · Bilan du test de décision cariste',...(S.cand?['Candidat : '+S.cand]:[]),'Date : '+date+' · Mode : '+(S.mode==='eval'?'Évaluation':'Entraînement')+' · Temps : '+spd(),'Score : '+ok+' / '+N+' situations entièrement réussies · '+lv,'Accidents graves : '+grave+' · Incidents : '+inc+' · Sous pression : '+(press.length?pressOk+' / '+press.length:'aucune suite')+' · Temps moyen : '+(avg==null?'—':fmt(avg)),'','Par compétence :',...lines,'','Détail :',...det,'','Simulation de sensibilisation : ne remplace ni la formation CACES R489 ni l’avis d’un formateur.'].join('\n');
-  $('r-copied').hidden=true;show('report');
+  $('r-copied').hidden=true;setupExport();show('report');
 }
+/* Export : partage, fichier et impression, disponibles hors cadre intégré (application sur GitHub Pages) */
+const STANDALONE=(()=>{try{return window.self===window.top}catch(e){return false}})();
+const fname=()=>'allee7-bilan'+(S.cand?'-'+S.cand.normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/gi,'-').replace(/^-|-$/g,'').toLowerCase():'')+'-'+new Date().toISOString().slice(0,10)+'.txt';
+function setupExport(){
+  $('r-dl').hidden=!STANDALONE;$('r-print').hidden=!STANDALONE;
+  $('r-share').hidden=!(STANDALONE&&navigator.share);
+}
+$('r-share').onclick=async()=>{
+  const title='Allée 7 · Bilan'+(S.cand?' · '+S.cand:'');
+  try{
+    const file=new File([reportText],fname(),{type:'text/plain'});
+    if(navigator.canShare&&navigator.canShare({files:[file]}))await navigator.share({title,files:[file]});
+    else await navigator.share({title,text:reportText});
+  }catch(e){if(e&&e.name!=='AbortError'){$('r-copied').hidden=false;$('r-copied').textContent='Partage impossible sur cet appareil : utilise Télécharger ou Copier'}}
+};
+$('r-dl').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([reportText],{type:'text/plain;charset=utf-8'}));a.download=fname();document.body.append(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000)};
+$('r-print').onclick=()=>{try{window.print()}catch(e){}};
 $('r-copy').onclick=()=>{const done=()=>{$('r-copied').hidden=false;$('r-copied').textContent='Rapport copié'};
   try{navigator.clipboard.writeText(reportText).then(done,fallback)}catch(e){fallback()}
   function fallback(){const ta=document.createElement('textarea');ta.value=reportText;ta.style.position='fixed';ta.style.opacity='0';document.body.append(ta);ta.select();let ok=false;try{ok=document.execCommand('copy')}catch(e){}ta.remove();$('r-copied').hidden=false;$('r-copied').textContent=ok?'Rapport copié':'Copie refusée : sélectionne le texte du détail à la main'}};
